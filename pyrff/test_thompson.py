@@ -24,16 +24,16 @@ class TestThompsonSampling:
         )
         assert len(batch) == batch_size
         # all samples for C02 are less then all others
-        assert not 'C02' in batch
+        assert 'C02' not in batch
         assert batch.count('C00') < batch.count('C01')
         pass
 
     @pytest.mark.xfail(reason='Probabilities are currently computed by brute force and non-exact.')
     def test_get_probabilities_exact_on_identical(self):
         samples = numpy.array([
-            [1,2,3,4,5],
-            [5,3,4,2,1],
-            [1,3,4,2,5]
+            [1, 2, 3, 4, 5],
+            [5, 3, 4, 2, 1],
+            [1, 3, 4, 2, 5]
         ]).T
         S, C = samples.shape
         assert S == 5

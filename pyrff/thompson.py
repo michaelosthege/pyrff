@@ -6,12 +6,12 @@ import typing
 
 
 def sample_batch(
-        samples:numpy.ndarray, *, ids:typing.Sequence,
-        batch_size:int, seed:typing.Optional[int]=None
-    ) -> tuple:
+    samples:numpy.ndarray, *, ids:typing.Sequence,
+    batch_size:int, seed:typing.Optional[int]=None
+) -> tuple:
     """
     Ranks all candidates by their samples.
-    
+
     Parameters
     ----------
         samples : numpy.ndarray
@@ -20,7 +20,7 @@ def sample_batch(
             (C,) candidate identifiers
         batch_size : int
             size of the next measurement batch (B)
-        
+
     Returns
     -------
         chosen_candidates : tuple
@@ -33,7 +33,7 @@ def sample_batch(
     random = numpy.random.RandomState(seed)
     for i in range(batch_size):
         idx = random.randint(n_samples, size=n_candidates)
-        selected_samples = samples[idx,numpy.arange(n_candidates)]
+        selected_samples = samples[idx, numpy.arange(n_candidates)]
         best_candidate = ids[numpy.argmax(selected_samples)]
         chosen_candidates.append(best_candidate)
     random.seed(None)
@@ -42,14 +42,14 @@ def sample_batch(
 
 def get_probabilities(samples:numpy.ndarray, nit:int=100_000):
     """Get thompson sampling probabilities from posterior.
-    
+
     Parameters
     ----------
         samples : numpy.ndarray
             (S, C) array of posterior samples (S) for each candidate (C)
         nit : int
             how many thompson draws samples to draw for the estimation
-        
+
     Returns
     -------
         probabilities : numpy.ndarray
