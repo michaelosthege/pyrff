@@ -1,7 +1,10 @@
 """
 Implementation of random fourier features (RFF).
 
-
+Adapted from other implementations:
++ [Hernández-Lobato, 2014](https://bitbucket.org/jmh233/codepesnips2014/src/master/sourceFiles/sampleMinimum.m)
++ [Cornell-MOE](https://github.com/wujian16/Cornell-MOE/blob/master/pes/PES/sample_minimum.py)
++ [Bradford, 2018](https://github.com/Eric-Bradford/TS-EMO/blob/master/TSEMO_V3.m#L495)
 """
 import numba
 import numpy
@@ -59,11 +62,6 @@ def sample_rff(
     It returns not only the approximate function, but also a njit-decorated version and its njit-decorated gradient.
     The njit-decorated callables have a compilation overhead on the first call!
     After that they are about 3.5x and 6x faster than non-njitted alternatives.
-
-    Adapted from other implementations:
-    + [Hernández-Lobato, 2014](https://bitbucket.org/jmh233/codepesnips2014/src/master/sourceFiles/sampleMinimum.m)
-    + [Cornell-MOE](https://github.com/wujian16/Cornell-MOE/blob/master/pes/PES/sample_minimum.py)
-    + [Bradford, 2018](https://github.com/Eric-Bradford/TS-EMO/blob/master/TSEMO_V3.m#L495)
 
     Parameters
     ----------
