@@ -16,8 +16,9 @@ def get_version():
 __version__ = get_version()
 
 
-setuptools.setup(name = __packagename__,
-        packages = setuptools.find_packages(), # this must be the same as the name above
+setuptools.setup(
+        name = __packagename__,
+        packages = setuptools.find_packages(),
         version=__version__,
         description='Implementation of random fourier feature (RFF) approximations and Thompson sampling.',
         url='https://github.com/michaelosthege/pyrff',
