@@ -481,3 +481,8 @@ healthchecksdb
 MigrationBackup/
 
 # End of https://www.gitignore.io/api/python,visualstudio,jupyternotebooks,visualstudiocode
+
+
+# Custom ignores
+.vscode/settings.json
+notebooks/Sandbox*.ipynb
