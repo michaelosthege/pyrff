@@ -33,7 +33,7 @@ def _compute_inverse(A:numpy.ndarray) -> numpy.ndarray:
 
 def _allow_1d_inputs(method):
     """
-    Decorates a function requiring 2D inputs such that 1D inputs are automatically
+    Decorates a method requiring 2D inputs such that 1D inputs are automatically
     expanded but the dimensionality of the return value is decremented again.
     """
     @functools.wraps(method)
