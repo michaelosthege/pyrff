@@ -6,9 +6,11 @@ Adapted from other implementations:
 + [Cornell-MOE](https://github.com/wujian16/Cornell-MOE/blob/master/pes/PES/sample_minimum.py)
 + [Bradford, 2018](https://github.com/Eric-Bradford/TS-EMO/blob/master/TSEMO_V3.m#L495)
 """
+import functools
 import numba
 import numpy
 import scipy.linalg
+import scipy.stats
 import typing
 
 
@@ -29,18 +31,109 @@ def _compute_inverse(A:numpy.ndarray) -> numpy.ndarray:
         return A_inverse
 
 
-def _vectorize(fun):
+def _allow_1d_inputs(method):
     """
-    Decorates a function requiring 2D inputs such that 1D inputs are automatically
+    Decorates a method requiring 2D inputs such that 1D inputs are automatically
     expanded but the dimensionality of the return value is decremented again.
     """
-    def wrapper(x):
+    @functools.wraps(method)
+    def wrapper(self, x):
         x2d = numpy.atleast_2d(x)
         if numpy.ndim(x) == 1:
-            return fun(x2d)[0]
+            return method(self, x2d)[0]
         else:
-            return fun(x2d)
+            return method(self, x2d)
     return wrapper
+
+
+class RffApproximation:
+    """
+    A function that approximates a sample from a GP by random fourier features.
+
+    Actual computation functions are njitted static methods to speed up evaluation and optimization.
+    """
+    def __init__(
+        self,
+        sqrt_2_alpha_over_m:float,
+        W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray
+    ):
+        """Creates an RFF function object from function features.
+
+        Parameters
+        ----------
+        sqrt_2_alpha_over_m : float
+        W : numpy.ndarray
+            (M, D) array
+        B : numpy.ndarray
+            (M, 1) array
+        sample_of_theta : numpy.ndarray
+            (M,) vector
+        """
+        self.sqrt_2_alpha_over_m = sqrt_2_alpha_over_m
+        self.W = W
+        self.M, self.D = W.shape
+        self.B = B
+        self.sample_of_theta = sample_of_theta
+        super().__init__()
+
+    @_allow_1d_inputs
+    def __call__(self, x:numpy.ndarray) -> typing.Union[numpy.ndarray, float]:
+        """Evalues an RFF approximation function, specified by the function features.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            a 2D array of coordinates (?, D)
+
+        Returns
+        -------
+        approx_y : numpy.ndarray
+            function evaluations (?,)
+        """
+        return RffApproximation._evaluate(x, self.sqrt_2_alpha_over_m, self.W, self.B, self.sample_of_theta)
+
+    @_allow_1d_inputs
+    def grad(self, x:numpy.ndarray) -> numpy.ndarray:
+        """Evaluates the gradient of an RFF approximation function, specified by the function features.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            a 2D array of coordinates (?, D)
+
+        Returns
+        -------
+        dydx : numpy.ndarray
+            evaluations of the gradient w.r.t. x (?, D)
+        """
+        return RffApproximation._grad(x, self.sqrt_2_alpha_over_m, self.W, self.B, self.sample_of_theta)
+
+    @staticmethod
+    @numba.njit
+    def _evaluate(x:numpy.ndarray, sqrt_2_alpha_over_m:float, W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray) -> numpy.ndarray:
+        M, D = W.shape
+        N = x.shape[0]
+        assert x.shape == (N, D)
+        phi_x = sqrt_2_alpha_over_m * numpy.cos(numpy.dot(W, x.T) + B)
+        assert phi_x.shape == (M, N)
+        approx_y = numpy.dot(phi_x.T, sample_of_theta)
+        assert approx_y.shape == (N,)
+        return approx_y
+
+    @staticmethod
+    @numba.njit
+    def _grad(x:numpy.ndarray, sqrt_2_alpha_over_m:float, W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray) -> numpy.ndarray:
+        M, D = W.shape
+        N = x.shape[0]
+        assert x.shape == (N, D)
+        temp = numpy.sin(numpy.dot(W, x.T) + B)
+        assert temp.shape == (M, N)
+        # the following is a refactor of the Cornell-MOE implementation that supports numba.njit (about 6x faster)
+        gradient = numpy.empty((N, D))
+        for n in range(N):
+            gradient_of_phi_x = -sqrt_2_alpha_over_m * temp[:,n] * W.T
+            gradient[n] = numpy.dot(gradient_of_phi_x, sample_of_theta)
+        return gradient
 
 
 def sample_rff(
@@ -116,8 +209,13 @@ def sample_rff(
         raise ShapeError('Argument "scaling" must be a scalar.')
     if not numpy.ndim(noise) == 0:
         raise ShapeError('Argument "noise" must be a scalar.')
-    if not numpy.isscalar(kernel_nu) and kernel_nu > 0:
-        raise DtypeError('Argument "kernel_nu" must be a positive-definite scalar.')
+    if not isinstance(kernel_nu, (int, float)) or kernel_nu <= 0:
+        raise ValueError('Argument "kernel_nu" must be a positive-definite scalar.')
+
+    # see Bradford 2018, equation 26
+    alpha = scaling**2
+    # just to avoid re-computing it all the time:
+    sqrt_2_alpha_over_m = numpy.sqrt(2*alpha/M)
 
     # construct function to sample p(w) (see [Bradford, 2018], equations 27 and 28)
     if numpy.isinf(kernel_nu):
@@ -127,83 +225,32 @@ def sample_rff(
         def p_w(size:tuple) -> numpy.ndarray:
             return scipy.stats.t.rvs(loc=0, scale=1 / lengthscales, df=kernel_nu, size=size)
 
+    # sample function features
     W = p_w(size=(M, D))
     assert W.shape == (M, D)
     B = numpy.random.uniform(0, 2*numpy.pi, size=(M, 1))
     assert B.shape == (M, 1)
-    # see Bradford 2018, equation 26
-    alpha = scaling**2
-    # just to avoid re-computing it all the time:
-    sqrt_2_alpha_over_m = numpy.sqrt(2*alpha/M)
 
     zeta = sqrt_2_alpha_over_m * numpy.cos(numpy.dot(W, X.T) + B)
     assert zeta.shape == (M, N_obs)
 
     A = numpy.divide(numpy.dot(zeta, zeta.T), noise) + numpy.eye(M)
     A_inverse = _compute_inverse(A)
+
     assert A_inverse.shape == (M, M)
     mean_of_post_theta = numpy.divide(numpy.dot(numpy.dot(A_inverse, zeta), Y), noise)
     assert mean_of_post_theta.shape == (M,)
+
     variance_of_post_theta = A_inverse
     assert variance_of_post_theta.shape == (M, M)
 
-    # sample function features
     sample_of_theta = numpy.random.multivariate_normal(mean_of_post_theta, variance_of_post_theta)
     assert sample_of_theta.shape == (M,)
 
-    def rff_approximation(x:numpy.ndarray) -> numpy.ndarray:
-        """Implements the RFF approximation function.
-
-        Parameters
-        ----------
-        x : numpy.ndarray
-            a 2D array of coordinates (?, D)
-
-        Returns
-        -------
-        approx_y : numpy.ndarray
-            function evaluations (?,)
-        """
-        N = x.shape[0]
-        assert x.shape == (N, D)
-        phi_x = sqrt_2_alpha_over_m*numpy.cos(numpy.dot(W, x.T) + B)
-        assert phi_x.shape == (M, N)
-        approx_y = numpy.dot(phi_x.T, sample_of_theta)
-        assert approx_y.shape == (N,)
-        return approx_y
-
-    def rff_approximation_gradient(x:numpy.ndarray) -> numpy.ndarray:
-        """Implements the gradient of the RFF approximation function.
-
-        Parameters
-        ----------
-        x : numpy.ndarray
-            a 2D array of coordinates (?, D)
-
-        Returns
-        -------
-        dydx : numpy.ndarray
-            evaluations of the gradient w.r.t. x (?, D)
-        """
-        N = x.shape[0]
-        assert x.shape == (N, D)
-        temp = numpy.sin(numpy.dot(W, x.T) + B)
-        assert temp.shape == (M, N)
-        # the following is a refactor of the Cornell-MOE implementation that supports numba.njit (about 6x faster)
-        gradient = numpy.empty((N, D))
-        for n in range(N):
-            gradient_of_phi_x = -sqrt_2_alpha_over_m * temp[:,n] * W.T
-            gradient[n] = numpy.dot(gradient_of_phi_x, sample_of_theta)
-        return gradient
-
+    # create a function object
+    rff = RffApproximation(sqrt_2_alpha_over_m, W, B, sample_of_theta)
     # call the function with test data to make sure that it works
     X_test = numpy.array([X[0], X[0]])
-    assert numpy.shape(rff_approximation(X_test)) == (2,)
-    assert numpy.shape(rff_approximation_gradient(X_test)) == (2, D)
-
-    # use the _vectorize decorator to make the functions compatible with (D,) and (?, D) inputs
-    f_rff = _vectorize(rff_approximation)
-    f_rff_njit = _vectorize(numba.njit(rff_approximation))
-    g_rff_njit = _vectorize(numba.njit(rff_approximation_gradient))
-
-    return f_rff, f_rff_njit, g_rff_njit
+    assert numpy.shape(rff(X_test)) == (2,)
+    assert numpy.shape(rff.grad(X_test)) == (2, D)
+    return rff
