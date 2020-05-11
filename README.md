@@ -5,6 +5,7 @@ It is heavily inspired by the implementations from [2, 3] and generalizes the im
 
 Examples are given as Jupyter notebooks for GPs fitted with [scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.gaussian_process.GaussianProcessRegressor.html) or [PyMC3](https://github.com/pymc-devs/pymc3):
 + [Example_RFF_PyMC3_1D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_1D_PyMC3.ipynb)
++ [Example_RFF_PyMC3_2D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_2D_PyMC3.ipynb)
 
 # References
 1. Hernández-Lobato, 2014 [paper](https://arxiv.org/abs/1511.05467), [code](https://bitbucket.org/jmh233/codepesnips2014/src/master/sourceFiles/sampleMinimum.m)
