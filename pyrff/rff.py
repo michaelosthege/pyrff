@@ -7,6 +7,7 @@ Adapted from other implementations:
 + [Bradford, 2018](https://github.com/Eric-Bradford/TS-EMO/blob/master/TSEMO_V3.m#L495)
 """
 import functools
+import hashlib
 import h5py
 import numba
 import numpy
@@ -86,6 +87,17 @@ class RffApproximation:
     def D(self) -> int:
         """Number of input dimensions."""
         return self.W.shape[1]
+
+    @property
+    def uuid(self) -> str:
+        """ A unique hash of the RFF function, created from its parameter arrays. """
+        components = [
+            hashlib.md5(self.sqrt_2_alpha_over_m).hexdigest(),
+            hashlib.md5(self.W).hexdigest(),
+            hashlib.md5(self.B).hexdigest(),
+            hashlib.md5(self.sample_of_theta).hexdigest(),
+        ]
+        return hashlib.md5(','.join(components).encode('ascii')).hexdigest().encode('ascii')
 
     @_allow_1d_inputs
     def __call__(self, x:numpy.ndarray) -> typing.Union[numpy.ndarray, float]:
@@ -286,6 +298,7 @@ def save_rffs(rffs:typing.Sequence[RffApproximation], fp:os.PathLike):
         (N, M, D) W
         (N, M, 1) B
         (N, M) sample_of_theta
+        (N,) uuid
     """
     # check the inputs
     N = len(rffs)
@@ -297,34 +310,17 @@ def save_rffs(rffs:typing.Sequence[RffApproximation], fp:os.PathLike):
         if not rff.M == M and rff.D == D:
             raise ValueError('All elements in the [rff] collection must have the same D and M.')
     with h5py.File(fp, 'w') as hfile:
-        hfile.create_dataset(
-            'sqrt_2_alpha_over_m', (N, 1), dtype=float,
-            data=numpy.array([
-                rff.sqrt_2_alpha_over_m
+        for name, shape, dtype in [
+            ('sqrt_2_alpha_over_m', (N, 1), float),
+            ('W', (N, M, D), float),
+            ('B', (N, M, 1), float),
+            ('sample_of_theta', (N, M), float),
+            ('uuid', (N,), 'S32'),
+        ]:
+            hfile.create_dataset(name, shape, dtype=dtype, data=[
+                getattr(rff, name)
                 for rff in rffs
             ])
-        )
-        hfile.create_dataset(
-            'W', (N, M, D), dtype=float,
-            data=numpy.array([
-                rff.W
-                for rff in rffs
-            ])
-        )
-        hfile.create_dataset(
-            'B', (N, M, 1), dtype=float,
-            data=numpy.array([
-                rff.B
-                for rff in rffs
-            ])
-        )
-        hfile.create_dataset(
-            'sample_of_theta', (N, M), dtype=float,
-            data=numpy.array([
-                rff.sample_of_theta
-                for rff in rffs
-            ])
-        )
     return fp
 
 
@@ -340,6 +336,7 @@ def load_rffs(fp:os.PathLike) -> typing.Sequence[RffApproximation]:
         (N, M, D) W
         (N, M, 1) B
         (N, M) sample_of_theta
+        (N,) uuid
 
     Returns
     -------
@@ -357,4 +354,9 @@ def load_rffs(fp:os.PathLike) -> typing.Sequence[RffApproximation]:
                 B=hfile['B'][n],
                 sample_of_theta=hfile['sample_of_theta'][n],
             )
+            # validate by comparing function hashes
+            expected = hfile['uuid'][n]
+            actual = rffs[n].uuid
+            if actual != expected:
+                raise Exception(f'The uuid of the function at position {n} did not match. ({actual} != {expected})')
     return rffs

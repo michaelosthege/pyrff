@@ -140,8 +140,11 @@ class TestRffSaveLoad:
                 assert 'W' in hfile
                 assert 'B' in hfile
                 assert 'sample_of_theta' in hfile
+                assert 'uuid' in hfile
 
             rffs_loaded = rff.load_rffs(fp)
             assert len(rffs_loaded) == len(rffs)
+            for r in range(len(rffs)):
+                assert rffs_loaded[r].uuid == rffs[r].uuid
         
         pass
