@@ -7,8 +7,11 @@ Adapted from other implementations:
 + [Bradford, 2018](https://github.com/Eric-Bradford/TS-EMO/blob/master/TSEMO_V3.m#L495)
 """
 import functools
+import hashlib
+import h5py
 import numba
 import numpy
+import os
 import scipy.linalg
 import scipy.stats
 import typing
@@ -71,10 +74,30 @@ class RffApproximation:
         """
         self.sqrt_2_alpha_over_m = sqrt_2_alpha_over_m
         self.W = W
-        self.M, self.D = W.shape
         self.B = B
         self.sample_of_theta = sample_of_theta
         super().__init__()
+
+    @property
+    def M(self) -> int:
+        """Number of fourier features."""
+        return self.W.shape[0]
+
+    @property
+    def D(self) -> int:
+        """Number of input dimensions."""
+        return self.W.shape[1]
+
+    @property
+    def uuid(self) -> str:
+        """ A unique hash of the RFF function, created from its parameter arrays. """
+        components = [
+            hashlib.md5(self.sqrt_2_alpha_over_m).hexdigest(),
+            hashlib.md5(self.W).hexdigest(),
+            hashlib.md5(self.B).hexdigest(),
+            hashlib.md5(self.sample_of_theta).hexdigest(),
+        ]
+        return hashlib.md5(','.join(components).encode('ascii')).hexdigest().encode('ascii')
 
     @_allow_1d_inputs
     def __call__(self, x:numpy.ndarray) -> typing.Union[numpy.ndarray, float]:
@@ -254,3 +277,86 @@ def sample_rff(
     assert numpy.shape(rff(X_test)) == (2,)
     assert numpy.shape(rff.grad(X_test)) == (2, D)
     return rff
+
+
+def save_rffs(rffs:typing.Sequence[RffApproximation], fp:os.PathLike):
+    """
+    Saves a collection of RffApproximations to an HDF5 file.
+
+    Parameters
+    ----------
+    rffs : list
+        a collection of RffApproximation objects, each with the same D and M
+    fp : os.PathLike
+        filepath for the HDF5 file to create
+
+    Returns
+    -------
+    fp : os.PathLike
+        the filepath passed as the input, now pointing to an HDF5 file with datasets:
+        (N, 1) sqrt_2_alpha_over_m
+        (N, M, D) W
+        (N, M, 1) B
+        (N, M) sample_of_theta
+        (N,) uuid
+    """
+    # check the inputs
+    N = len(rffs)
+    if N == 0:
+        raise ValueError('The [rffs] collection is empty.')
+    M = rffs[0].M
+    D = rffs[0].D
+    for rff in rffs:
+        if not rff.M == M and rff.D == D:
+            raise ValueError('All elements in the [rff] collection must have the same D and M.')
+    with h5py.File(fp, 'w') as hfile:
+        for name, shape, dtype in [
+            ('sqrt_2_alpha_over_m', (N, 1), float),
+            ('W', (N, M, D), float),
+            ('B', (N, M, 1), float),
+            ('sample_of_theta', (N, M), float),
+            ('uuid', (N,), 'S32'),
+        ]:
+            hfile.create_dataset(name, shape, dtype=dtype, data=[
+                getattr(rff, name)
+                for rff in rffs
+            ])
+    return fp
+
+
+def load_rffs(fp:os.PathLike) -> typing.Sequence[RffApproximation]:
+    """
+    Loads a collection of RffApproximations from an HDF5 file.
+
+    Parameters
+    ----------
+    fp : os.PathLike
+        filepath to an HDF5 file containing datasets for:
+        (N, 1) sqrt_2_alpha_over_m
+        (N, M, D) W
+        (N, M, 1) B
+        (N, M) sample_of_theta
+        (N,) uuid
+
+    Returns
+    -------
+    rffs : list
+        loaded RffApproximation objects
+    """
+    rffs = None
+    with h5py.File(fp, 'r') as hfile:
+        N, M, D = hfile['W'].shape
+        rffs = [None] * N
+        for n in range(N):
+            rffs[n] = RffApproximation(
+                sqrt_2_alpha_over_m=hfile['sqrt_2_alpha_over_m'][n],
+                W=hfile['W'][n],
+                B=hfile['B'][n],
+                sample_of_theta=hfile['sample_of_theta'][n],
+            )
+            # validate by comparing function hashes
+            expected = hfile['uuid'][n]
+            actual = rffs[n].uuid
+            if actual != expected:
+                raise Exception(f'The uuid of the function at position {n} did not match. ({actual} != {expected})')
+    return rffs

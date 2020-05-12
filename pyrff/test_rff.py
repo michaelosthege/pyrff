@@ -1,5 +1,8 @@
+import h5py
 import numpy
+import pathlib
 import pytest
+import tempfile
 
 from . import exceptions
 from . import rff
@@ -96,4 +99,52 @@ class TestSampleRFF:
             x_minus[:, d] -= epsilon
             grad_diff[:, d] = (fun(x_plus) - fun(x_minus)) / (2*epsilon)
         numpy.testing.assert_allclose(fun.grad(X), grad_diff, atol=1e-6)
+        pass
+
+
+class TestRffSaveLoad:
+    def test_save_load_rffs(self):
+        X = numpy.array([[0, 0.75, -0.75, -0.375, 1.125, 0.375, -1.125]]).T
+        Y = numpy.array([
+            0.17817326, -0.14260799, 0.13385016,
+            0.44349725, -0.11945854, -0.28416883, -0.06767212
+        ])
+        mp = {
+            'ls': numpy.array([0.33805151]),
+            'scaling': numpy.array(0.87595652),
+            'sigma': numpy.array(0.00041511)
+        }
+
+        with pytest.raises(ValueError) as execinfo:
+            rff.save_rffs([], 'testfile.h5')
+        assert 'empty' in execinfo.value.args[0]
+
+        # sample a list of RFFs
+        rffs = [
+            rff.sample_rff(
+                lengthscales=mp['ls'],
+                scaling=mp['scaling'],
+                noise=mp['sigma'],
+                kernel_nu=numpy.inf,
+                X=X, Y=Y, M=200
+            )
+            for i in range(20)
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fp = pathlib.Path(tmpdir, 'testrffs.h5')
+            rff.save_rffs(rffs, fp)
+
+            with h5py.File(fp, 'r') as hfile:
+                assert 'sqrt_2_alpha_over_m' in hfile
+                assert 'W' in hfile
+                assert 'B' in hfile
+                assert 'sample_of_theta' in hfile
+                assert 'uuid' in hfile
+
+            rffs_loaded = rff.load_rffs(fp)
+            assert len(rffs_loaded) == len(rffs)
+            for r in range(len(rffs)):
+                assert rffs_loaded[r].uuid == rffs[r].uuid
+        
         pass
