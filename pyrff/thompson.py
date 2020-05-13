@@ -32,9 +32,12 @@ def sample_batch(
     chosen_candidates = []
     random = numpy.random.RandomState(seed)
     for i in range(batch_size):
+        # for every sample in the batch, randomize the column order
+        # to prevent always selecting lower-numbered candidates when >=2 samples are equal
+        col_order = random.permutation(n_candidates)
         idx = random.randint(n_samples, size=n_candidates)
-        selected_samples = samples[idx, numpy.arange(n_candidates)]
-        best_candidate = ids[numpy.argmax(selected_samples)]
+        selected_samples = samples[:, col_order][idx, numpy.arange(n_candidates)]
+        best_candidate = ids[col_order][numpy.argmax(selected_samples)]
         chosen_candidates.append(best_candidate)
     random.seed(None)
     return tuple(chosen_candidates)
