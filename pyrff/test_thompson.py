@@ -28,6 +28,16 @@ class TestThompsonSampling:
         assert batch.count('C00') < batch.count('C01')
         pass
 
+    def test_no_bias_on_sample_collisions(self):
+        samples = numpy.array([
+            [2, 2, 2],
+            [2, 2, 2],
+        ])
+        batch = thompson.sample_batch(samples, ids=('A', 'B', 'C'), batch_size=100, seed=1234)
+        assert batch.count('A') != 100
+        assert batch.count('C') != 0
+        pass
+
     @pytest.mark.xfail(reason='Probabilities are currently computed by brute force and non-exact.')
     def test_get_probabilities_exact_on_identical(self):
         samples = numpy.array([
