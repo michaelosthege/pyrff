@@ -61,7 +61,8 @@ class TestSampleRFF:
         assert message_fragment in exinfo.value.args[0]
         pass
 
-    def test_rff_1d(self):
+    @pytest.mark.parametrize('M', [100, 200, 300])
+    def test_rff_1d(self, M):
         X = numpy.array([[0, 0.75, -0.75, -0.375, 1.125, 0.375, -1.125]]).T
         Y = numpy.array([
             0.17817326, -0.14260799, 0.13385016,
@@ -78,8 +79,88 @@ class TestSampleRFF:
             scaling=mp['scaling'],
             noise=mp['sigma'],
             kernel_nu=numpy.inf,
-            X=X, Y=Y, M=200
+            X=X, Y=Y, M=M
         )
+        assert fun.D == 1
+        assert fun.M == M
+
+        # run checks with randomly sampled coordinates
+        N = 500
+        D = X.shape[1]
+        X = numpy.random.uniform(low=-2, high=2, size=(N, D))
+
+        # check the output shapes
+        assert fun(X).shape == (N,)
+        assert fun.grad(X).shape == (N, D)
+
+        # check correctness of gradient by manual differentiation
+        epsilon = 0.000001
+        grad_diff = numpy.zeros((N, D))
+        for d in range(D):
+            x_plus, x_minus = X.copy(), X.copy()
+            x_plus[:, d] += epsilon
+            x_minus[:, d] -= epsilon
+            grad_diff[:, d] = (fun(x_plus) - fun(x_minus)) / (2*epsilon)
+        numpy.testing.assert_allclose(fun.grad(X), grad_diff, atol=1e-6)
+        pass
+
+    @pytest.mark.parametrize('M', [100, 200, 300])
+    def test_rff_2d(self, M):
+        X = numpy.array([
+            [ 2.91766097,  2.24035167],
+            [ 0.05847315, -1.36898571],
+            [-0.97848763, -1.69827441],
+            [-1.34113714, -0.94010644],
+            [ 2.17295361, -2.05980198],
+            [-2.15467653,  1.54248168],
+            [ 1.41794951, -0.86602145],
+            [-0.9534419 ,  1.0008183 ],
+            [-1.69739617,  0.36856189],
+            [-2.25492733, -1.08158109],
+            [ 2.71928324, -2.17585926],
+            [ 0.41647858,  2.8539929 ],
+            [ 0.02020237,  1.00598524],
+            [-2.79485101, -0.2632838 ],
+            [-2.06489182, -0.1437062 ],
+            [-1.98178537,  2.37755002],
+            [-0.75963745, -0.72184242],
+            [ 2.14989953,  0.87636633],
+            [ 0.50077019,  1.01010016],
+            [-1.93324428,  2.0954881 ],
+            [-0.34576451,  1.98880626],
+            [ 1.5835243 ,  2.51814586],
+            [-2.57655944, -2.0630075 ],
+            [ 0.82136539,  0.33417412],
+            [-1.84842772, -0.4460641 ],
+            [ 0.08052125, -1.38373449],
+            [ 0.59412011, -1.67895633],
+            [-1.19482503, -2.7096331 ],
+            [ 0.38592035,  2.61619323],
+            [ 1.81816585,  1.1838309 ]
+        ])
+        Y = numpy.array([
+            0.2684595 , -3.12345661, -1.20876944, -2.0739321 , -0.02077514,
+            0.50824162, -2.01574938,  1.43596611, -0.81839906, -0.17958556,
+            -0.02243076, -0.30501982,  3.87966439, -0.25128758, -0.99743626,
+            -0.18646517, -4.7381341 ,  7.1723458 ,  5.83390888, -0.01031394,
+            -0.10963341, -0.07243528, -0.10766074, -0.9695199 , -1.10566236,
+            -3.04485123, -1.64010435,  0.01366085, -0.23411911,  7.61113715
+        ])
+        mp = {
+            'ls': numpy.array([3.86353836, 1.24398732]),
+            'scaling': numpy.array(8.82195995),
+            'sigma': numpy.array(0.9789097)
+        }
+
+        fun = rff.sample_rff(
+            lengthscales=mp['ls'],
+            scaling=mp['scaling'],
+            noise=mp['sigma'],
+            kernel_nu=numpy.inf,
+            X=X, Y=Y, M=M
+        )
+        assert fun.D == 2
+        assert fun.M == M
 
         # run checks with randomly sampled coordinates
         N = 500
