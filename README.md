@@ -1,6 +1,7 @@
 [![PyPI version](https://badge.fury.io/py/pyrff.svg)](https://badge.fury.io/py/pyrff)
 [![pipeline](https://github.com/michaelosthege/pyrff/workflows/pipeline/badge.svg)](https://github.com/michaelosthege/pyrff/actions)
 [![coverage](https://codecov.io/gh/michaelosthege/pyrff/branch/master/graph/badge.svg)](https://codecov.io/gh/michaelosthege/pyrff)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3831380.svg)](https://doi.org/10.5281/zenodo.3831380)
 
 
 # `pyrff`: Approximating Gaussian Process samples with Random Fourier Features
@@ -11,6 +12,16 @@ It is heavily inspired by the implementations from [2, 3] and generalizes the im
 Examples are given as Jupyter notebooks for GPs fitted with [PyMC3](https://github.com/pymc-devs/pymc3):
 + [Example_RFF_PyMC3_1D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_1D_PyMC3.ipynb)
 + [Example_RFF_PyMC3_2D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_2D_PyMC3.ipynb)
+
+# Installation
+`pyrff` is released on [PyPI](https://pypi.org/project/pyrff/):
+```
+pip install pyrff
+```
+# Usage and Citing
+`pyrff` is licensed under the [GNU Affero General Public License v3.0](https://github.com/michaelosthege/pyrff/blob/master/LICENSE).
+
+Head over to Zenodo to [generate a BibTeX citation](https://doi.org/10.5281/zenodo.3831380) for the latest release.
 
 # References
 1. Hernández-Lobato, 2014 [paper](https://arxiv.org/abs/1511.05467), [code](https://bitbucket.org/jmh233/codepesnips2014/src/master/sourceFiles/sampleMinimum.m)
