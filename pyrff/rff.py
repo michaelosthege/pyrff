@@ -133,7 +133,10 @@ class RffApproximation:
 
     @staticmethod
     @numba.njit
-    def _evaluate(x:numpy.ndarray, sqrt_2_alpha_over_m:float, W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray) -> numpy.ndarray:
+    def _evaluate(
+        x:numpy.ndarray,
+        sqrt_2_alpha_over_m:float, W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray
+    ) -> numpy.ndarray:
         M, D = W.shape
         N = x.shape[0]
         assert x.shape == (N, D)
