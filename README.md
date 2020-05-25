@@ -25,6 +25,6 @@ pip install pyrff
 Head over to Zenodo to [generate a BibTeX citation](https://doi.org/10.5281/zenodo.3831380) for the latest release.
 
 # References
-1. Hernández-Lobato, 2014 [paper](https://arxiv.org/abs/1511.05467), [code](https://bitbucket.org/jmh233/codepesnips2014/src/master/sourceFiles/sampleMinimum.m)
-2. PES implementation in Cornell-MOE [code](https://github.com/wujian16/Cornell-MOE/blob/master/pes/PES/sample_minimum.py)
-3. Bradford, 2018 [paper](https://link.springer.com/article/10.1007/s10898-018-0609-2/), [code](https://github.com/Eric-Bradford/TS-EMO/blob/master/TSEMO_V3.m#L495)
+1. Hernández-Lobato, 2014 [paper](https://arxiv.org/abs/1511.05467), [code](https://bitbucket.org/jmh233/codepesnips2014/src/ac843ba992ca1879190a472ac20c83a447e4e2c0/sourceFiles/sampleMinimum.m#lines-1)
+2. PES implementation in Cornell-MOE [code](https://github.com/wujian16/Cornell-MOE/blob/df299d1be882d2af9796d7a68b3f9505cac7a53e/pes/PES/sample_minimum.py#L23)
+3. Bradford, 2018 [paper](https://link.springer.com/article/10.1007/s10898-018-0609-2/), [code](https://github.com/Eric-Bradford/TS-EMO/blob/87151d94081db1d0f128a788ebdb789d2891ee9a/TSEMO_V4.m#L501)
