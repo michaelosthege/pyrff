@@ -3,10 +3,11 @@ import re
 import setuptools
 
 __packagename__ = 'pyrff'
+ROOT = pathlib.Path(__file__).parent
 
 
 def get_version():
-    VERSIONFILE = pathlib.Path(pathlib.Path(__file__).parent, __packagename__, '__init__.py')
+    VERSIONFILE = pathlib.Path(ROOT, __packagename__, '__init__.py')
     initfile_lines = open(VERSIONFILE, 'rt').readlines()
     VSRE = r"^__version__ = ['\"]([^'\"]*)['\"]"
     for line in initfile_lines:
@@ -25,7 +26,7 @@ setuptools.setup(
     version=__version__,
     description='Implementation of random fourier feature (RFF) approximations and Thompson sampling.',
     license='AGPLv3',
-    long_description=open('README.md').read(),
+    long_description=open(pathlib.Path(ROOT, 'README.md')).read(),
     long_description_content_type='text/markdown',
     url='https://github.com/michaelosthege/pyrff',
     author='Michael Osthege',
@@ -38,7 +39,7 @@ setuptools.setup(
         'Topic :: Scientific/Engineering :: Mathematics'
     ],
     install_requires=[
-        # via requirements.txt
+        open(pathlib.Path(ROOT, 'requirements.txt')).readlines()
     ],
     python_requires='>=3.6'
 )
