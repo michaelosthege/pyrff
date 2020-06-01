@@ -38,5 +38,5 @@ jobs:
         twine upload --repository pypi --username __token__ --password ${PYPI_TOKEN} dist/*
     - name: Test installation
       run: |
-        sleep 60
+        sleep 120
         pip install pyrff==${GITHUB_REF:11}
