@@ -53,28 +53,3 @@ def sample_batch(
         chosen_candidates.append(best_candidate)
     random.seed(None)
     return tuple(chosen_candidates)
-
-
-def get_probabilities(samples:numpy.ndarray, nit:int=100_000):
-    """Get thompson sampling probabilities from posterior.
-
-    Parameters
-    ----------
-        samples : numpy.ndarray
-            (S, C) array of posterior samples (S) for each candidate (C)
-        nit : int
-            how many thompson draws samples to draw for the estimation
-
-    Returns
-    -------
-        probabilities : numpy.ndarray
-            (C,) probabilities that the candidates are sampled
-    """
-    n_samples, n_candidates = samples.shape
-
-    frequencies = numpy.zeros(n_candidates)
-    for _ in range(nit):
-        idx = numpy.random.randint(n_samples, size=n_candidates)
-        selected_samples = samples[idx, numpy.arange(n_candidates)]
-        frequencies[numpy.argmax(selected_samples)] += 1
-    return frequencies / frequencies.sum()

@@ -39,17 +39,3 @@ class TestThompsonSampling:
         assert batch.count('C') != 0
         pass
 
-    @pytest.mark.xfail(reason='Probabilities are currently computed by brute force and non-exact.')
-    def test_get_probabilities_exact_on_identical(self):
-        samples = numpy.array([
-            [1, 2, 3, 4, 5],
-            [5, 3, 4, 2, 1],
-            [1, 3, 4, 2, 5]
-        ]).T
-        S, C = samples.shape
-        assert S == 5
-        assert C == 3
-
-        probabilities = thompson.get_probabilities(samples)
-        numpy.testing.assert_array_equal(probabilities, [1/C]*C)
-        pass
