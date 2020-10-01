@@ -4,31 +4,43 @@ Convenience implementation of the standard Thompson Sampling algorithm.
 import numpy
 import typing
 
+# custom type shortcuts
+Sample = typing.Union[int, float]
+
 
 def sample_batch(
-    samples:numpy.ndarray, *, ids:typing.Sequence,
+    candidate_samples: typing.Sequence[typing.Sequence[Sample]], *,
+    ids:typing.Sequence,
     batch_size:int, seed:typing.Optional[int]=None
 ) -> tuple:
     """
-    Ranks all candidates by their samples.
+    Draws a batch of candidates by Thompson Sampling from posterior samples.
 
     Parameters
     ----------
-        samples : numpy.ndarray
-            (S, C) array of posterior samples (S) for each candidate (C)
-        ids : numpy.ndarray, list, tuple
-            (C,) candidate identifiers
-        batch_size : int
-            size of the next measurement batch (B)
+    candidate_samples : array-like
+        posterior samples for each candidate (C,)
+        (sample count may be different)
+    ids : numpy.ndarray, list, tuple
+        (C,) candidate identifiers
+    batch_size : int
+        number of candidates to draw (B)
 
     Returns
     -------
-        chosen_candidates : tuple
-            (B,) chosen candidate ids for the batch
+    chosen_candidates : tuple
+        (B,) chosen candidate ids for the batch
     """
-    n_samples, n_candidates = samples.shape
-    assert len(ids) == n_candidates
+    n_candidates = len(candidate_samples)
+    n_samples = tuple(map(len, candidate_samples))
+    if len(ids) != n_candidates:
+        raise ValueError(f"Number of candidate ids ({len(ids)}) does not match number of candidate_samples ({n_candidates}).")
     ids = numpy.atleast_1d(ids)
+    # work with matrix even if sample count is varies to get more efficient slicing
+    samples = numpy.zeros((max(n_samples), n_candidates))
+    samples[:] = numpy.nan
+    for c, (samps, s) in enumerate(zip(candidate_samples, n_samples)):
+        samples[:s, c] = samps
     chosen_candidates = []
     random = numpy.random.RandomState(seed)
     for i in range(batch_size):

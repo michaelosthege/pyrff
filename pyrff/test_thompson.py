@@ -15,11 +15,11 @@ class TestThompsonSampling:
             low=[0, 0, -1],
             high=[0.2, 1, 0],
             size=(S, C)
-        )
-        numpy.testing.assert_array_equal(samples.shape, (S, C))
+        ).T
+        numpy.testing.assert_array_equal(samples.shape, (C, S))
 
         batch = thompson.sample_batch(
-            samples=samples, ids=ids,
+            candidate_samples=samples, ids=ids,
             batch_size=batch_size, seed=seed
         )
         assert len(batch) == batch_size
@@ -29,10 +29,11 @@ class TestThompsonSampling:
         pass
 
     def test_no_bias_on_sample_collisions(self):
-        samples = numpy.array([
+        samples = [
             [2, 2, 2],
+            [2, 2],
             [2, 2, 2],
-        ])
+        ]
         batch = thompson.sample_batch(samples, ids=('A', 'B', 'C'), batch_size=100, seed=1234)
         assert batch.count('A') != 100
         assert batch.count('C') != 0
