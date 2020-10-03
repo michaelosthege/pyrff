@@ -5,7 +5,6 @@ import itertools
 import typing
 import fastprogress
 import numpy
-import pandas
 
 from . import exceptions
 
@@ -87,7 +86,7 @@ def _sort_samples(
     -------
     samples : array
         sorted array of all samples
-    sample_cols : array
+    sample_candidates : array
         the group numbers
     """
     flat_samples = numpy.vstack([
@@ -117,8 +116,6 @@ def _win_draw_prob(cprobs: numpy.ndarray) -> float:
     """
     C = cprobs.shape[1]
     columns = numpy.arange(C)
-    # TODO: this can be further accelerated by not using a DataFrame
-    df_smart_combos = pandas.DataFrame(columns=["p_event", "p_win"])
 
     drawable = tuple(columns[cprobs[2, :] > 0])
     p_win_draw = 0
@@ -132,21 +129,20 @@ def _win_draw_prob(cprobs: numpy.ndarray) -> float:
             combo = ["W"]*C
             for c in combination:
                 combo[c] = "D"
-            df_smart_combos.loc["".join(combo)] = (p_event, p_win)
     return p_win_draw
 
 
 def _rolling_probs_calculation(
-    samples: numpy.ndarray, sample_cols: numpy.ndarray,
+    samples: numpy.ndarray, sample_candidates: numpy.ndarray,
     s_totals: numpy.ndarray,
-) -> pandas.DataFrame:
+) -> typing.Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]:
     """ Calculates win, loose and win-by-draw probabilities for all samples.
 
     Parameters
     ----------
     samples : numpy.ndarray
         (S,) values of candidate samples
-    sample_cols : numpy.ndarray
+    sample_candidates : numpy.ndarray
         (S,) corresponding candidate indices
     s_totals : numpy.ndarray
         (C,) numbers of samples per candidate
@@ -170,7 +166,7 @@ def _rolling_probs_calculation(
     unique_values, idx_from, counts = numpy.unique(samples, return_counts=True, return_index=True)
     for value, ifrom, nsame in fastprogress.progress_bar(tuple(zip(unique_values, idx_from, counts))):
         ito = ifrom + nsame
-        candidates_with_value = sample_cols[ifrom:ito]
+        candidates_with_value = sample_candidates[ifrom:ito]
 
         # s_same: number of samples IN EACH COLUMN that have the same [value]
         s_same = numpy.zeros(C)
@@ -204,15 +200,7 @@ def _rolling_probs_calculation(
         # by this iterative counting, we avoid doing S*C </=/> comparisons, dramatically reducing complexity
         s_smaller += s_same
 
-    # summarize results as DataFrame
-    df_probs = pandas.DataFrame(data={
-        "value": samples,
-        "candidate": sample_cols,
-        "p_win": p_win,
-        "p_loose": p_loose,
-        "p_win_draw": p_win_draw,
-    })
-    return df_probs
+    return p_win, p_loose, p_win_draw
 
 
 def sampling_probabilities(
@@ -220,6 +208,9 @@ def sampling_probabilities(
     correlated:bool,
 ) -> numpy.ndarray:
     """ Calculates the thompson sampling probability of each candidate.
+
+    ATTENTION: When correlated=False is specified, the occurence of non-unique sample values can
+    increase the runtime complexity to worst-case O(2^total_samples).
 
     Parameters
     ----------
@@ -240,18 +231,31 @@ def sampling_probabilities(
     if correlated and len(set(s_totals)) != 1:
         raise exceptions.ShapeError("For correlated sampling, all candidates must have the same number of samples.")
 
-    probabilities = numpy.zeros(C)
+    probabilities = numpy.zeros(C, dtype=float)
     if correlated:
+        # this case is O(S^2 * C) because it does not need to account for combinations
         S = s_totals[0]
         for s, samples in enumerate(numpy.array(candidate_samples).T):
             vwin = numpy.max(samples)
+            # which candidates have the highest value?
             i_winners = numpy.argwhere(samples == vwin)
             n_winners = len(i_winners)
+            # attribute winning probability to the winners
             probabilities[i_winners] += 1 / n_winners
         probabilities /= S
     else:
-        samples, sample_cols = _sort_samples(candidate_samples)
-        df_probs = _rolling_probs_calculation(samples, sample_cols, s_totals)
-        for fc, df in df_probs.groupby("candidate"):
-            probabilities[fc] = sum(df.p_win + df.p_win_draw) / len(df)
+        # For uncorrelated TS, all possible combinations must be considered.
+        # Naively doing all combinations would be O(S^C), but this implementation simplifies it:
+        # 1. it's sufficient to categorize win/loose/draw
+        # 2. sorting the samples allows for an iteration that needs much fewer </=/> comparisons
+        # 3. combinatorics for draw win probabilities is only required for non-unique sample values
+
+        # first sort all samples into a vector
+        samples, sample_candidates = _sort_samples(candidate_samples)
+        # then calculate the win/loose/win-by-draw probabilities for each sample
+        p_win, p_loose, p_win_draw = _rolling_probs_calculation(samples, sample_candidates, s_totals)
+        # finally summarize the sample-wise probabilities by the corresponding candidate
+        for c in range(C):
+            mask = sample_candidates == c
+            probabilities[c] = numpy.sum(p_win[mask] + p_win_draw[mask]) / numpy.sum(mask)
     return probabilities
