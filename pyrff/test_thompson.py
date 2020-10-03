@@ -39,3 +39,58 @@ class TestThompsonSampling:
         assert batch.count('C') != 0
         pass
 
+
+class TestThompsonProbabilities:
+    def test_sort_samples(self):
+        samples, sample_cols = thompson._sort_samples([
+            [3,1,2],
+            [4,-1],
+            [7],
+        ])
+        numpy.testing.assert_array_equal(samples, [-1, 1, 2, 3, 4, 7])
+        numpy.testing.assert_array_equal(sample_cols, [1, 0, 0, 0, 1, 2])
+        pass
+
+    def test_win_draw_prob(self):
+        assert thompson._win_draw_prob(numpy.array([
+            [1, 0, 0],
+            [0, 1, 1],
+            [0, 0, 0],
+        ])) == 0.0
+
+        assert thompson._win_draw_prob(numpy.array([
+            [0, 0, 0],
+            [0, 0, 0],
+            [1, 1, 1],
+        ])) == 0.25
+
+        numpy.testing.assert_allclose(thompson._win_draw_prob(numpy.array([
+            [0, 0],
+            [0.5, 0.75],
+            [0.5, 0.25],
+        ])), 0.041666666)
+        pass
+
+    def test_sampling_probability(self):
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 1, 2],
+            [0, 1, 2],
+        ]), [0.5, 0.5])
+        
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 1, 2],
+            [10],
+        ]), [0, 1])
+
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 1, 2],
+            [3, 4, 5],
+            [5, 4, 3],
+        ]), [0, 0.5, 0.5])
+
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [5, 6],
+            [0, 0, 10, 20],
+            [5, 6],
+        ]), [0.25, 0.5, 0.25])
+        pass

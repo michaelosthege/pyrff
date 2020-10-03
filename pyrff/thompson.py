@@ -1,8 +1,11 @@
 """
 Convenience implementation of the standard Thompson Sampling algorithm.
 """
-import numpy
+import itertools
 import typing
+import fastprogress
+import numpy
+import pandas
 
 # custom type shortcuts
 Sample = typing.Union[int, float]
@@ -53,3 +56,176 @@ def sample_batch(
         chosen_candidates.append(best_candidate)
     random.seed(None)
     return tuple(chosen_candidates)
+
+
+def _sort_samples(
+    candidate_samples: typing.Sequence[typing.Sequence[Sample]],
+) -> typing.Tuple[numpy.ndarray, numpy.ndarray]:
+    """ Flattens samples into a sorted array and corresponding group numbers.
+
+    Parameters
+    ----------
+    candidate_samples : array-like
+        posterior samples for each candidate (C,)
+        (sample count may be different)
+
+    Returns
+    -------
+    samples : array
+        sorted array of all samples
+    sample_cols : array
+        the group numbers
+    """
+    flat_samples = numpy.vstack([
+        numpy.stack([samps, numpy.repeat(g, len(samps))]).T
+        for g, samps in enumerate(candidate_samples)
+    ])
+    flat_samples = flat_samples[numpy.argsort(flat_samples[:, 0]), :]
+    return flat_samples[:, 0], flat_samples[:, 1].astype(int)
+
+
+def _win_draw_prob(cprobs: numpy.ndarray) -> float:
+    """ Calculate the probability of winning by draw.
+
+    This function iterates over all possible combinations of draws.
+    The runtime complexity explodes exponentially with O(2^N - N - 1).
+
+    Parameters
+    ----------
+    cprobs : numpy.ndarray
+        (3, N) array of probabilities that a win/loose/draw occurs
+        between the candidate value and other candidates (candidate itself is not included in [cprobs])
+
+    Returns
+    -------
+    p_win_draw : float
+        probability of winning in a fair draw against the other candidates
+    """
+    C = cprobs.shape[1]
+    columns = numpy.arange(C)
+    # TODO: this can be further accelerated by not using a DataFrame
+    df_smart_combos = pandas.DataFrame(columns=["p_event", "p_win"])
+
+    drawable = tuple(columns[cprobs[2, :] > 0])
+    p_win_draw = 0
+    for n in range(1, len(drawable) + 1):
+        p_win = 1 / (n + 1)
+        for combination in itertools.combinations(drawable, r=n):
+            draw_probs = cprobs[2, list(combination)]
+            win_probs = cprobs[0, list(sorted(set(columns).difference(combination)))]
+            p_event = numpy.prod(draw_probs) * numpy.prod(win_probs)
+            p_win_draw += p_win * p_event
+            combo = ["W"]*C
+            for c in combination:
+                combo[c] = "D"
+            df_smart_combos.loc["".join(combo)] = (p_event, p_win)
+    return p_win_draw
+
+
+def _rolling_probs_calculation(
+    samples: numpy.ndarray, sample_cols: numpy.ndarray,
+    s_totals: numpy.ndarray,
+) -> pandas.DataFrame:
+    """ Calculates win, loose and win-by-draw probabilities for all samples.
+
+    Parameters
+    ----------
+    samples : numpy.ndarray
+        (S,) values of candidate samples
+    sample_cols : numpy.ndarray
+        (S,) corresponding candidate indices
+    s_totals : numpy.ndarray
+        (C,) numbers of samples per candidate
+
+    Returns
+    -------
+    df_probs : pandas.DataFrame
+        table with win/loose/win-by-draw probabilities for each sample
+    """
+    C = s_totals.shape[0]
+
+    p_win = numpy.zeros_like(samples, dtype=float)
+    p_loose = numpy.zeros_like(samples, dtype=float)
+    p_win_draw = numpy.zeros_like(samples, dtype=float)
+    
+    # s_smaller: number of samples IN EACH COLUMN that are smaller than [value]
+    s_smaller = numpy.zeros((C,))
+
+    # now iterate over groups with identical sample values in the DataFrame
+    # pandas.DataFrame.groupby is too slow for this -> DIY iterator using the unique idx & counts
+    unique_values, idx_from, counts = numpy.unique(samples, return_counts=True, return_index=True)
+    for value, ifrom, nsame in fastprogress.progress_bar(tuple(zip(unique_values, idx_from, counts))):
+        ito = ifrom + nsame
+        candidates_with_value = sample_cols[ifrom:ito]
+
+        # s_same: number of samples IN EACH COLUMN that have the same [value]
+        s_same = numpy.zeros(C)
+        same_cols, same_counts = numpy.unique(candidates_with_value, return_counts=True)
+        s_same[same_cols] = same_counts
+        # s_larger: number of samples IN EACH COLUMN that are larger than [value]
+        s_larger = s_totals - s_smaller - s_same
+
+        #numpy.testing.assert_array_equal(s_smaller + s_same + s_larger, s_totals)
+
+        # from the counts of smaller/same/larger values in other columns,
+        # calculate the probabilities of direct win, direct loss and draw
+        cprobs_all = numpy.array([
+            s_smaller,
+            s_larger,
+            s_same
+        ]) / s_totals
+        for s, fc in zip(range(ifrom, ito), candidates_with_value):
+            # do not look at probabilities w.r.t. the same column:
+            cprobs = numpy.hstack([cprobs_all[:, :fc], cprobs_all[:, fc+1:]])
+        
+            p_win[s] = numpy.prod(cprobs[0, :])
+            p_loose[s] = 1 - numpy.prod(1 - cprobs[1, :])
+            
+            if s_same[fc] != nsame:
+                # draws with other columns are possible -> calculate combinatorial event & win probabilities
+                p_win_draw[s] = _win_draw_prob(cprobs)
+            #else:
+            #    # no other candidate has a sample of this value
+            #    p_win_draw[s] was initialized to 0
+
+        # increment the column-wise count of samples that are smaller than [value]
+        # by this iterative counting, we avoid doing S*C </=/> comparisons, dramatically reducing complexity
+        s_smaller += s_same
+
+    # summarize results as DataFrame
+    df_probs = pandas.DataFrame(data={
+        "value": samples,
+        "candidate": sample_cols,
+        "p_win": p_win,
+        "p_loose": p_loose,
+        "p_win_draw": p_win_draw,
+    })
+    return df_probs
+
+
+def sampling_probabilities(
+    candidate_samples: typing.Sequence[typing.Sequence[Sample]],
+) -> numpy.ndarray:
+    """ Calculates the probability thompson sampling probability of each candidate.
+
+    Parameters
+    ----------
+    candidate_samples : array-like
+        posterior samples for each candidate (C,)
+        (sample count may be different)
+
+    Returns
+    -------
+    probabilities : numpy.ndarray
+        (C,) array of sampling probabilities
+    """
+    C = len(candidate_samples)
+    s_totals = numpy.array(tuple(map(len, candidate_samples)))
+    samples, sample_cols = _sort_samples(candidate_samples)
+
+    df_probs = _rolling_probs_calculation(samples, sample_cols, s_totals)
+        
+    probabilities = numpy.zeros(C)
+    for fc, df in df_probs.groupby("candidate"):
+        probabilities[fc] = sum(df.p_win + df.p_win_draw) / len(df)
+    return probabilities

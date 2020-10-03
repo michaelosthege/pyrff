@@ -1,6 +1,7 @@
 h5py
 numba
 numpy
+pandas
 pytest
 scipy
 typing
