@@ -1,3 +1,4 @@
+fastprogress
 h5py
 numba
 numpy
