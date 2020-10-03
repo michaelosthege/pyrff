@@ -7,6 +7,8 @@ import fastprogress
 import numpy
 import pandas
 
+from . import exceptions
+
 # custom type shortcuts
 Sample = typing.Union[int, float]
 
@@ -14,7 +16,9 @@ Sample = typing.Union[int, float]
 def sample_batch(
     candidate_samples: typing.Sequence[typing.Sequence[Sample]], *,
     ids:typing.Sequence,
-    batch_size:int, seed:typing.Optional[int]=None
+    correlated:bool,
+    batch_size:int,
+    seed:typing.Optional[int] = None,
 ) -> tuple:
     """
     Draws a batch of candidates by Thompson Sampling from posterior samples.
@@ -26,8 +30,13 @@ def sample_batch(
         (sample count may be different)
     ids : numpy.ndarray, list, tuple
         (C,) candidate identifiers
+    correlated : bool
+        Switches between jointly (correlated=True) or independently (correlated=False) sampling the candidates.
+        When correlated=True, all candidates must have the same number of samples.
     batch_size : int
         number of candidates to draw (B)
+    seed : int
+        seed for the random number generator (will reset afterwards)
 
     Returns
     -------
@@ -36,8 +45,10 @@ def sample_batch(
     """
     n_candidates = len(candidate_samples)
     n_samples = tuple(map(len, candidate_samples))
+    if correlated and len(set(n_samples)) != 1:
+        raise exceptions.ShapeError("For correlated sampling, all candidates must have the same number of samples.")
     if len(ids) != n_candidates:
-        raise ValueError(f"Number of candidate ids ({len(ids)}) does not match number of candidate_samples ({n_candidates}).")
+        raise exceptions.ShapeError(f"Number of candidate ids ({len(ids)}) does not match number of candidate_samples ({n_candidates}).")
     ids = numpy.atleast_1d(ids)
     # work with matrix even if sample count is varies to get more efficient slicing
     samples = numpy.zeros((max(n_samples), n_candidates))
@@ -50,7 +61,10 @@ def sample_batch(
         # for every sample in the batch, randomize the column order
         # to prevent always selecting lower-numbered candidates when >=2 samples are equal
         col_order = random.permutation(n_candidates)
-        idx = random.randint(n_samples, size=n_candidates)
+        if correlated:
+            idx = numpy.repeat(numpy.random.randint(n_samples[0]), n_candidates)
+        else:
+            idx = random.randint(n_samples, size=n_candidates)
         selected_samples = samples[:, col_order][idx, numpy.arange(n_candidates)]
         best_candidate = ids[col_order][numpy.argmax(selected_samples)]
         chosen_candidates.append(best_candidate)
@@ -147,7 +161,7 @@ def _rolling_probs_calculation(
     p_win = numpy.zeros_like(samples, dtype=float)
     p_loose = numpy.zeros_like(samples, dtype=float)
     p_win_draw = numpy.zeros_like(samples, dtype=float)
-    
+
     # s_smaller: number of samples IN EACH COLUMN that are smaller than [value]
     s_smaller = numpy.zeros((C,))
 
@@ -165,8 +179,6 @@ def _rolling_probs_calculation(
         # s_larger: number of samples IN EACH COLUMN that are larger than [value]
         s_larger = s_totals - s_smaller - s_same
 
-        #numpy.testing.assert_array_equal(s_smaller + s_same + s_larger, s_totals)
-
         # from the counts of smaller/same/larger values in other columns,
         # calculate the probabilities of direct win, direct loss and draw
         cprobs_all = numpy.array([
@@ -177,14 +189,14 @@ def _rolling_probs_calculation(
         for s, fc in zip(range(ifrom, ito), candidates_with_value):
             # do not look at probabilities w.r.t. the same column:
             cprobs = numpy.hstack([cprobs_all[:, :fc], cprobs_all[:, fc+1:]])
-        
+
             p_win[s] = numpy.prod(cprobs[0, :])
             p_loose[s] = 1 - numpy.prod(1 - cprobs[1, :])
-            
+
             if s_same[fc] != nsame:
                 # draws with other columns are possible -> calculate combinatorial event & win probabilities
                 p_win_draw[s] = _win_draw_prob(cprobs)
-            #else:
+            # else:
             #    # no other candidate has a sample of this value
             #    p_win_draw[s] was initialized to 0
 
@@ -205,14 +217,18 @@ def _rolling_probs_calculation(
 
 def sampling_probabilities(
     candidate_samples: typing.Sequence[typing.Sequence[Sample]],
+    correlated:bool,
 ) -> numpy.ndarray:
-    """ Calculates the probability thompson sampling probability of each candidate.
+    """ Calculates the thompson sampling probability of each candidate.
 
     Parameters
     ----------
     candidate_samples : array-like
         posterior samples for each candidate (C,)
         (sample count may be different)
+    correlated : bool
+        Switches between jointly (correlated=True) or independently (correlated=False) sampling the candidates.
+        When correlated=True, all candidates must have the same number of samples.
 
     Returns
     -------
@@ -221,11 +237,21 @@ def sampling_probabilities(
     """
     C = len(candidate_samples)
     s_totals = numpy.array(tuple(map(len, candidate_samples)))
-    samples, sample_cols = _sort_samples(candidate_samples)
+    if correlated and len(set(s_totals)) != 1:
+        raise exceptions.ShapeError("For correlated sampling, all candidates must have the same number of samples.")
 
-    df_probs = _rolling_probs_calculation(samples, sample_cols, s_totals)
-        
     probabilities = numpy.zeros(C)
-    for fc, df in df_probs.groupby("candidate"):
-        probabilities[fc] = sum(df.p_win + df.p_win_draw) / len(df)
+    if correlated:
+        S = s_totals[0]
+        for s, samples in enumerate(numpy.array(candidate_samples).T):
+            vwin = numpy.max(samples)
+            i_winners = numpy.argwhere(samples == vwin)
+            n_winners = len(i_winners)
+            probabilities[i_winners] += 1 / n_winners
+        probabilities /= S
+    else:
+        samples, sample_cols = _sort_samples(candidate_samples)
+        df_probs = _rolling_probs_calculation(samples, sample_cols, s_totals)
+        for fc, df in df_probs.groupby("candidate"):
+            probabilities[fc] = sum(df.p_win + df.p_win_draw) / len(df)
     return probabilities
