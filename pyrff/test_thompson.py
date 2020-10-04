@@ -1,6 +1,7 @@
 import numpy
 import pytest
 
+from . import exceptions
 from . import thompson
 
 
@@ -15,11 +16,12 @@ class TestThompsonSampling:
             low=[0, 0, -1],
             high=[0.2, 1, 0],
             size=(S, C)
-        )
-        numpy.testing.assert_array_equal(samples.shape, (S, C))
+        ).T
+        numpy.testing.assert_array_equal(samples.shape, (C, S))
 
         batch = thompson.sample_batch(
-            samples=samples, ids=ids,
+            candidate_samples=samples, ids=ids,
+            correlated=False,
             batch_size=batch_size, seed=seed
         )
         assert len(batch) == batch_size
@@ -29,26 +31,126 @@ class TestThompsonSampling:
         pass
 
     def test_no_bias_on_sample_collisions(self):
-        samples = numpy.array([
+        samples = [
             [2, 2, 2],
+            [2, 2],
             [2, 2, 2],
-        ])
-        batch = thompson.sample_batch(samples, ids=('A', 'B', 'C'), batch_size=100, seed=1234)
+        ]
+        batch = thompson.sample_batch(samples, ids=('A', 'B', 'C'), correlated=False, batch_size=100, seed=1234)
         assert batch.count('A') != 100
         assert batch.count('C') != 0
         pass
 
-    @pytest.mark.xfail(reason='Probabilities are currently computed by brute force and non-exact.')
-    def test_get_probabilities_exact_on_identical(self):
-        samples = numpy.array([
-            [1, 2, 3, 4, 5],
-            [5, 3, 4, 2, 1],
-            [1, 3, 4, 2, 5]
-        ]).T
-        S, C = samples.shape
-        assert S == 5
-        assert C == 3
+    def test_correlated_sampling(self):
+        samples = [
+            [1, 2, 3],
+            [1, 1, 1],
+            [0, 1, 2],
+        ]
+        batch = thompson.sample_batch(samples, ids=('A', 'B', 'C'), correlated=True, batch_size=100, seed=1234)
+        assert batch.count('A') < 100
+        assert batch.count('B') < 100 / 3
+        assert batch.count('C') == 0
+        pass
 
-        probabilities = thompson.get_probabilities(samples)
-        numpy.testing.assert_array_equal(probabilities, [1/C]*C)
+
+class TestExceptions:
+    def test_id_count(self):
+        with pytest.raises(exceptions.ShapeError, match="candidate ids"):
+            thompson.sample_batch([
+                    [1,2,3],
+                    [1,2],
+                ],
+                ids=("A", "B", "C"),
+                correlated=False,
+                batch_size=30,
+            )
+
+    def test_correlated_sample_size_check(self):
+        with pytest.raises(exceptions.ShapeError, match="number of samples"):
+            thompson.sample_batch([
+                    [1,2,3],
+                    [1,2],
+                ],
+                ids=("A", "B"),
+                correlated=True,
+                batch_size=30,
+            )
+
+        with pytest.raises(exceptions.ShapeError):
+            thompson.sampling_probabilities([
+                    [1,2,3],
+                    [1,2],
+                ],
+                correlated=True,
+            )
+        pass
+
+
+class TestThompsonProbabilities:
+    def test_sort_samples(self):
+        samples, sample_cols = thompson._sort_samples([
+            [3,1,2],
+            [4,-1],
+            [7],
+        ])
+        numpy.testing.assert_array_equal(samples, [-1, 1, 2, 3, 4, 7])
+        numpy.testing.assert_array_equal(sample_cols, [1, 0, 0, 0, 1, 2])
+        pass
+
+    def test_win_draw_prob(self):
+        assert thompson._win_draw_prob(numpy.array([
+            [1, 0, 0],
+            [0, 1, 1],
+            [0, 0, 0],
+        ])) == 0.0
+
+        assert thompson._win_draw_prob(numpy.array([
+            [0, 0, 0],
+            [0, 0, 0],
+            [1, 1, 1],
+        ])) == 0.25
+
+        numpy.testing.assert_allclose(thompson._win_draw_prob(numpy.array([
+            [0, 0],
+            [0.5, 0.75],
+            [0.5, 0.25],
+        ])), 0.041666666)
+        pass
+
+    def test_sampling_probability_uncorrelated(self):
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 1, 2],
+            [0, 1, 2],
+        ], correlated=False), [0.5, 0.5])
+
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 1, 2],
+            [10],
+        ], correlated=False), [0, 1])
+
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 1, 2],
+            [3, 4, 5],
+            [5, 4, 3],
+        ], correlated=False), [0, 0.5, 0.5])
+
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [5, 6],
+            [0, 0, 10, 20],
+            [5, 6],
+        ], correlated=False), [0.25, 0.5, 0.25])
+        pass
+
+    def test_sampling_probability_correlated(self):
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 1, 2],
+            [0, 1, 2],
+        ], correlated=True), [0.5, 0.5])
+
+        numpy.testing.assert_array_equal(thompson.sampling_probabilities([
+            [0, 4, 2],
+            [3, 4, 5],
+            [5, 1, 6],
+        ], correlated=True), [0.5/3, 0.5/3, 2/3])
         pass
