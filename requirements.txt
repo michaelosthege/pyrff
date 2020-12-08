@@ -4,4 +4,3 @@ numba
 numpy
 pytest
 scipy
-typing
