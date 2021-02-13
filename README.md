@@ -1,4 +1,4 @@
-[![PyPI version](https://badge.fury.io/py/pyrff.svg)](https://badge.fury.io/py/pyrff)
+[![PyPI version](https://img.shields.io/pypi/v/pyrff)](https://pypi.org/project/pyrff)
 [![pipeline](https://github.com/michaelosthege/pyrff/workflows/pipeline/badge.svg)](https://github.com/michaelosthege/pyrff/actions)
 [![coverage](https://codecov.io/gh/michaelosthege/pyrff/branch/master/graph/badge.svg)](https://codecov.io/gh/michaelosthege/pyrff)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3831380.svg)](https://doi.org/10.5281/zenodo.3831380)
