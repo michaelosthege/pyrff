@@ -22,6 +22,22 @@ pip install pyrff
 # Usage and Citing
 `pyrff` is licensed under the [GNU Affero General Public License v3.0](https://github.com/michaelosthege/pyrff/blob/master/LICENSE).
 
+When using `robotools` in your work, please cite the [corresponding software version](https://doi.org/10.5281/zenodo.3831380).
+
+```bibtex
+@software{pyrff,
+  author       = {Michael Osthege and
+                  Kobi Felton},
+  title        = {michaelosthege/pyrff: v2.0.1},
+  month        = dec,
+  year         = 2020,
+  publisher    = {Zenodo},
+  version      = {v2.0.1},
+  doi          = {10.5281/zenodo.4317685},
+  url          = {https://doi.org/10.5281/zenodo.4317685}
+}
+```
+
 Head over to Zenodo to [generate a BibTeX citation](https://doi.org/10.5281/zenodo.3831380) for the latest release.
 
 # References
