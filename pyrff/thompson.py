@@ -61,7 +61,7 @@ def sample_batch(
         # to prevent always selecting lower-numbered candidates when >=2 samples are equal
         col_order = random.permutation(n_candidates)
         if correlated:
-            idx = numpy.repeat(numpy.random.randint(n_samples[0]), n_candidates)
+            idx = numpy.repeat(random.randint(n_samples[0]), n_candidates)
         else:
             idx = random.randint(n_samples, size=n_candidates)
         selected_samples = samples[:, col_order][idx, numpy.arange(n_candidates)]
