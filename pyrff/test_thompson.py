@@ -53,6 +53,30 @@ class TestThompsonSampling:
         assert batch.count('C') == 0
         pass
 
+    @pytest.mark.parametrize("correlated", [False, True])
+    def test_seeding(self, correlated):
+        """This is a regression test for https://github.com/michaelosthege/pyrff/issues/28"""
+        rng = numpy.random.RandomState(123)
+        samples = [
+            rng.uniform(size=200),
+            rng.uniform(size=200),
+            rng.uniform(size=200),
+        ]
+        batches = []
+        for _ in range(10):
+            batch = thompson.sample_batch(
+                candidate_samples=samples,
+                ids=["A", "B", "C"],
+                correlated=correlated,
+                batch_size=10,
+                seed=123,
+            )
+            batches.append("".join(batch))
+
+        # Assert that all batches are identical.
+        assert len(set(batches)) == 1
+        pass
+
 
 class TestExceptions:
     def test_id_count(self):
