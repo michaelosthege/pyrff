@@ -24,10 +24,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "fastprogress",
     "h5py",
     "numba",
     "numpy",
+    "rich",
     "scipy",
 ]
 
