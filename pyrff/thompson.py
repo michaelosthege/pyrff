@@ -3,8 +3,8 @@ Convenience implementation of the standard Thompson Sampling algorithm.
 """
 import itertools
 import typing
-import fastprogress
 import numpy
+from rich.progress import track
 
 from . import exceptions
 
@@ -164,7 +164,7 @@ def _rolling_probs_calculation(
     # now iterate over groups with identical sample values in the DataFrame
     # pandas.DataFrame.groupby is too slow for this -> DIY iterator using the unique idx & counts
     unique_values, idx_from, counts = numpy.unique(samples, return_counts=True, return_index=True)
-    for value, ifrom, nsame in fastprogress.progress_bar(tuple(zip(unique_values, idx_from, counts))):
+    for value, ifrom, nsame in track(tuple(zip(unique_values, idx_from, counts))):
         ito = ifrom + nsame
         candidates_with_value = sample_candidates[ifrom:ito]
 
