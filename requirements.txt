@@ -1,6 +1,0 @@
-fastprogress
-h5py
-numba
-numpy
-pytest
-scipy
