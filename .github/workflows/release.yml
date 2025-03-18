@@ -13,20 +13,18 @@ jobs:
       PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - name: Install uv and set the Python version
+      uses: astral-sh/setup-uv@v5
       with:
-        python-version: "3.11"
-    - name: Install dependencies
-      run: |
-        pip install pytest pytest-cov twine wheel
-        pip install -r requirements.txt
+        python-version: "3.12"
+    - name: Install the project
+      run: uv sync --all-extras --dev
     - name: Test with pytest
       run: |
-        pytest --cov=./pyrff --cov-report term-missing pyrff/
+        uv run pytest --cov=./pyrff --cov-report term-missing pyrff/
     - name: Build package
       run: |
-        python setup.py sdist bdist_wheel
+        uv run python -m build
     - name: Check version number match
       run: |
         echo "GITHUB_REF: ${GITHUB_REF}"
@@ -34,8 +32,8 @@ jobs:
         grep -Rq "^Version: ${GITHUB_REF:11}$" pyrff.egg-info/PKG-INFO
     - name: Publish to PyPI
       run: |
-        twine check dist/*
-        twine upload --repository pypi --username __token__ --password ${PYPI_TOKEN} dist/*
+        uv run twine check dist/*
+        uv run twine upload --repository pypi --username __token__ --password ${PYPI_TOKEN} dist/*
     - name: Test installation
       run: |
         sleep 120

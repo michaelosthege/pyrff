@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=62.6"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyrff"
+version = "2.0.3"
+description = "Implementation of random fourier feature (RFF) approximations and Thompson sampling."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "GNU Affero General Public License v3"}
+authors = [
+    {name = "Michael Osthege", email = "michael.osthege@outlook.com"},
+]
+classifiers = [
+    "Programming Language :: Python",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+dependencies = [
+    "fastprogress",
+    "h5py",
+    "numba",
+    "numpy",
+    "scipy",
+]
+
+[tool.setuptools]
+package-dir = {"pyrff" = "pyrff"}
+
+[dependency-groups]
+dev = [
+    "build>=1.2.2.post1",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "twine>=6.1.0",
+]
