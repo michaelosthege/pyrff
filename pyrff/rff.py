@@ -8,6 +8,7 @@ Adapted from other implementations:
 """
 import functools
 import hashlib
+import logging
 import h5py
 import numba
 import numpy
@@ -17,7 +18,10 @@ import scipy.stats
 import typing
 
 
-from . exceptions import ShapeError, DtypeError
+from . exceptions import ShapeError
+
+
+_log = logging.getLogger(__name__)
 
 
 def _compute_inverse(A:numpy.ndarray) -> numpy.ndarray:
@@ -170,6 +174,8 @@ def sample_rff(
     X:numpy.ndarray,
     Y:numpy.ndarray,
     M:int,
+    *,
+    max_retries: int=5,
 ) -> typing.Tuple[
     typing.Callable[[numpy.ndarray], typing.Union[numpy.ndarray, float]],
     typing.Callable[[numpy.ndarray], typing.Union[numpy.ndarray, float]],
@@ -211,6 +217,9 @@ def sample_rff(
     M : int
         number of fourier features to use in the approximation
         according to [Mutny & Krause, 2018], the approximation error scales O(m^(1/2))
+    max_retries
+        Maximum number of retries in case of LinAlgError.
+        Retries will be DEBUG-logged.
 
     Returns
     -------
@@ -243,6 +252,7 @@ def sample_rff(
     # just to avoid re-computing it all the time:
     sqrt_2_alpha_over_m = numpy.sqrt(2*alpha/M)
 
+
     # construct function to sample p(w) (see [Bradford, 2018], equations 27 and 28)
     if numpy.isinf(kernel_nu):
         def p_w(size:tuple) -> numpy.ndarray:
@@ -251,26 +261,34 @@ def sample_rff(
         def p_w(size:tuple) -> numpy.ndarray:
             return scipy.stats.t.rvs(loc=0, scale=1 / lengthscales, df=kernel_nu, size=size)
 
-    # sample function features
-    W = p_w(size=(M, D))
-    assert W.shape == (M, D)
-    B = numpy.random.uniform(0, 2*numpy.pi, size=(M, 1))
-    assert B.shape == (M, 1)
+    for r in reversed(range(max_retries)):
+        try:
+            # sample function features
+            W = p_w(size=(M, D))
+            assert W.shape == (M, D)
+            B = numpy.random.uniform(0, 2*numpy.pi, size=(M, 1))
+            assert B.shape == (M, 1)
 
-    zeta = sqrt_2_alpha_over_m * numpy.cos(numpy.dot(W, X.T) + B)
-    assert zeta.shape == (M, N_obs)
+            zeta = sqrt_2_alpha_over_m * numpy.cos(numpy.dot(W, X.T) + B)
+            assert zeta.shape == (M, N_obs)
 
-    A = numpy.divide(numpy.dot(zeta, zeta.T), noise) + numpy.eye(M)
-    A_inverse = _compute_inverse(A)
+            A = numpy.divide(numpy.dot(zeta, zeta.T), noise) + numpy.eye(M)
+            A_inverse = _compute_inverse(A)
 
-    assert A_inverse.shape == (M, M)
-    mean_of_post_theta = numpy.divide(numpy.dot(numpy.dot(A_inverse, zeta), Y), noise)
-    assert mean_of_post_theta.shape == (M,)
+            assert A_inverse.shape == (M, M)
+            mean_of_post_theta = numpy.divide(numpy.dot(numpy.dot(A_inverse, zeta), Y), noise)
+            assert mean_of_post_theta.shape == (M,)
 
-    variance_of_post_theta = A_inverse
-    assert variance_of_post_theta.shape == (M, M)
+            variance_of_post_theta = A_inverse
+            assert variance_of_post_theta.shape == (M, M)
 
-    sample_of_theta = numpy.random.multivariate_normal(mean_of_post_theta, variance_of_post_theta)
+            sample_of_theta = numpy.random.multivariate_normal(mean_of_post_theta, variance_of_post_theta)
+        except numpy.linalg.LinAlgError as ex:
+            if r == 0:
+                raise
+            _log.debug("LinAlgError: %s from lengthscales=%s, scaling=%f, noise=%f. Retrying.", ex, lengthscales, scaling, noise)
+
+    assert sample_of_theta is not None
     assert sample_of_theta.shape == (M,)
 
     # create a function object
