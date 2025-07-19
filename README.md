@@ -9,9 +9,9 @@ This project is a Python implementation of random fourier feature (RFF) approxim
 
 It is heavily inspired by the implementations from [2, 3] and generalizes the implementation to work with GP hyperparameters obtained from any GP library.
 
-Examples are given as Jupyter notebooks for GPs fitted with [PyMC3](https://github.com/pymc-devs/pymc3) and [scikit-learn](https://scikit-learn.org):
-+ [Example_RFF_PyMC3_1D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_1D_PyMC3.ipynb)
-+ [Example_RFF_PyMC3_2D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_2D_PyMC3.ipynb)
+Examples are given as Jupyter notebooks for GPs fitted with [PyMC](https://github.com/pymc-devs/PyMC) and [scikit-learn](https://scikit-learn.org):
++ [Example_RFF_PyMC_1D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_1D_PyMC.ipynb)
++ [Example_RFF_PyMC_2D](https://github.com/michaelosthege/pyrff/blob/master/notebooks/Example_RFF_2D_PyMC.ipynb)
 + [Thompson sampling, 1D with sklearn](https://github.com/michaelosthege/pyrff/blob/master/notebooks/TS_1D_sklearn.ipynb)
 
 # Installation
