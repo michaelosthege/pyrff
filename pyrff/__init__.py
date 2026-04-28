@@ -1,4 +1,4 @@
-import importlib
+import importlib.metadata
 from . exceptions import DtypeError, ShapeError
 from . rff import sample_rff, save_rffs, load_rffs
 from . thompson import sample_batch, sampling_probabilities
