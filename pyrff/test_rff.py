@@ -185,7 +185,6 @@ class TestSampleRFF:
         numpy.testing.assert_allclose(fun.grad(X), grad_diff, atol=1e-6)
         pass
 
-    @pytest.mark.xfail(reason="Current RFF implementation is sensitive to mean(Y).")
     def test_sample_rff_auto_zeroing(self):
         X = numpy.array([[0, 0.75, -0.75, -0.375, 1.125, 0.375, -1.125]]).T
         Y = numpy.array([
@@ -221,7 +220,7 @@ class TestSampleRFF:
             Y=Y + 500_000,
             M=100,
             seed=1234,
-            # TODO: auto_zero=True,
+            auto_zero=True,
         )
 
         N = 500
@@ -242,7 +241,8 @@ class TestSampleRFF:
 
 
 class TestRffSaveLoad:
-    def test_save_load_rffs(self):
+    @pytest.mark.parametrize("auto_zero", [False, True])
+    def test_save_load_rffs(self, auto_zero: bool):
         X = numpy.array([[0, 0.75, -0.75, -0.375, 1.125, 0.375, -1.125]]).T
         Y = numpy.array([
             0.17817326, -0.14260799, 0.13385016,
@@ -268,6 +268,7 @@ class TestRffSaveLoad:
                 kernel_nu=numpy.inf,
                 X=X, Y=Y, M=200,
                 seed=rng,
+                auto_zero=auto_zero,
             )
             for i in range(20)
         ]
@@ -282,10 +283,27 @@ class TestRffSaveLoad:
                 assert 'B' in hfile
                 assert 'sample_of_theta' in hfile
                 assert 'uuid' in hfile
+                assert 'y_offset' in hfile
 
             rffs_loaded = rff.load_rffs(fp)
             assert len(rffs_loaded) == len(rffs)
             for r in range(len(rffs)):
                 assert rffs_loaded[r].uuid == rffs[r].uuid
+
+            # Test pre-v2.2.0 backwards compatibility
+            # by removing the y_offset from the HDF5 file.
+            with h5py.File(fp, "a") as hfile:
+                del hfile["y_offset"]
+            with h5py.File(fp, "r") as hfile:
+                assert "y_offset" not in hfile
+            reloaded = rff.load_rffs(fp)
+            assert reloaded[7].uuid == rffs_loaded[7].uuid
+            # Missing y_offset defaults to 0, which in case of auto_zero=True in this test
+            # results in the reloaded RFF being offset by mean(Y).
+            if not auto_zero:
+                numpy.testing.assert_array_equal(reloaded[5](X), rffs_loaded[5](X))
+            else:
+                # Just allclose due to float precision
+                numpy.testing.assert_allclose(reloaded[5](X), rffs_loaded[5](X) - numpy.mean(Y))
 
         pass
