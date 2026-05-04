@@ -63,7 +63,10 @@ class RffApproximation:
     def __init__(
         self,
         sqrt_2_alpha_over_m:float,
-        W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray
+        W:numpy.ndarray,
+        B:numpy.ndarray,
+        sample_of_theta:numpy.ndarray,
+        y_offset: float = 0.0,
     ):
         """Creates an RFF function object from function features.
 
@@ -76,11 +79,14 @@ class RffApproximation:
             (M, 1) array
         sample_of_theta : numpy.ndarray
             (M,) vector
+        y_offset
+            Offset to be added to function evaluations.
         """
         self.sqrt_2_alpha_over_m = sqrt_2_alpha_over_m
         self.W = W
         self.B = B
         self.sample_of_theta = sample_of_theta
+        self.y_offset = y_offset
         super().__init__()
 
     @property
@@ -95,7 +101,7 @@ class RffApproximation:
 
     @property
     def uuid(self) -> str:
-        """ A unique hash of the RFF function, created from its parameter arrays. """
+        """A unique hash of the RFF function, created from its parameters, except for ``y_offset``."""
         components = [
             hashlib.md5(self.sqrt_2_alpha_over_m).hexdigest(),
             hashlib.md5(self.W).hexdigest(),
@@ -118,7 +124,7 @@ class RffApproximation:
         approx_y : numpy.ndarray
             function evaluations (?,)
         """
-        return RffApproximation._evaluate(x, self.sqrt_2_alpha_over_m, self.W, self.B, self.sample_of_theta)
+        return RffApproximation._evaluate(x, self.sqrt_2_alpha_over_m, self.W, self.B, self.sample_of_theta, self.y_offset)
 
     @_allow_1d_inputs
     def grad(self, x:numpy.ndarray) -> numpy.ndarray:
@@ -140,7 +146,7 @@ class RffApproximation:
     @numba.njit
     def _evaluate(
         x:numpy.ndarray,
-        sqrt_2_alpha_over_m:float, W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray
+        sqrt_2_alpha_over_m:float, W:numpy.ndarray, B:numpy.ndarray, sample_of_theta:numpy.ndarray, y_offset: float
     ) -> numpy.ndarray:
         M, D = W.shape
         N = x.shape[0]
@@ -149,7 +155,7 @@ class RffApproximation:
         assert phi_x.shape == (M, N)
         approx_y = numpy.dot(phi_x.T, sample_of_theta)
         assert approx_y.shape == (N,)
-        return approx_y
+        return approx_y + y_offset
 
     @staticmethod
     @numba.njit
@@ -178,6 +184,7 @@ def sample_rff(
     *,
     max_retries: int=5,
     seed: int | SeedSequence | BitGenerator | Generator | RandomState | None = None,
+    auto_zero: bool = False,
 ) -> typing.Tuple[
     typing.Callable[[numpy.ndarray], typing.Union[numpy.ndarray, float]],
     typing.Callable[[numpy.ndarray], typing.Union[numpy.ndarray, float]],
@@ -227,6 +234,10 @@ def sample_rff(
         ⚠️ When sampling many RFFs in a loop,
         you should pass a `numpy.random.Generator` or `numpy.random.SeedSequence`,
         otherwise the RFFs will all be identical!
+    auto_zero
+        If ``True`` the ``Y`` data will automatically be offset to zero-mean,
+        and the offset will automatically be restored in the RFF evaluation.
+        With ``auto_zero=True``, one can approximate constant-mean GPs instead of zero-mean GPs.
 
     Returns
     -------
@@ -259,6 +270,11 @@ def sample_rff(
     alpha = scaling**2
     # just to avoid re-computing it all the time:
     sqrt_2_alpha_over_m = numpy.sqrt(2*alpha/M)
+
+    Y_offset: float = 0.0
+    if auto_zero:
+        Y_offset = float(numpy.mean(Y))
+        Y = Y - Y_offset
 
 
     # construct function to sample p(w) (see [Bradford, 2018], equations 27 and 28)
@@ -300,7 +316,7 @@ def sample_rff(
     assert sample_of_theta.shape == (M,)
 
     # create a function object
-    rff = RffApproximation(sqrt_2_alpha_over_m, W, B, sample_of_theta)
+    rff = RffApproximation(sqrt_2_alpha_over_m, W, B, sample_of_theta, y_offset=Y_offset)
     # call the function with test data to make sure that it works
     X_test = numpy.array([X[0], X[0]])
     assert numpy.shape(rff(X_test)) == (2,)
@@ -344,6 +360,7 @@ def save_rffs(rffs:typing.Sequence[RffApproximation], fp:os.PathLike):
             ('W', (N, M, D), float),
             ('B', (N, M, 1), float),
             ('sample_of_theta', (N, M), float),
+            ('y_offset', (N,), float),
             ('uuid', (N,), 'S32'),
         ]:
             hfile.create_dataset(name, shape, dtype=dtype, data=[
@@ -376,12 +393,19 @@ def load_rffs(fp:os.PathLike) -> typing.Sequence[RffApproximation]:
     with h5py.File(fp, 'r') as hfile:
         N, M, D = hfile['W'].shape
         rffs = [None] * N
+        # y_offset was added in v2.2.0
+        if "y_offset" in hfile.keys():
+            y_offsets = hfile["y_offset"]
+        else:
+            y_offsets = [0.0] * N
+
         for n in range(N):
             rffs[n] = RffApproximation(
                 sqrt_2_alpha_over_m=hfile['sqrt_2_alpha_over_m'][n],
                 W=hfile['W'][n],
                 B=hfile['B'][n],
                 sample_of_theta=hfile['sample_of_theta'][n],
+                y_offset=y_offsets[n],
             )
             # validate by comparing function hashes
             expected = hfile['uuid'][n]
