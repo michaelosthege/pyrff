@@ -51,9 +51,9 @@ class TestSampleRFF:
             kernel_nu=3/2,
             X=numpy.random.uniform(0, 1, size=(34, D)),
             Y=numpy.random.normal(size=(34,)),
-            M=200
+            M=200,
+            seed=1234,
         )
-        numpy.random.seed(1234)
         rff.sample_rff(**kwargs)
 
         kwargs[kwarg] = override
@@ -75,13 +75,13 @@ class TestSampleRFF:
             'sigma': numpy.array(0.00041511)
         }
 
-        numpy.random.seed(1234)
         fun = rff.sample_rff(
             lengthscales=mp['ls'],
             scaling=mp['scaling'],
             noise=mp['sigma'],
             kernel_nu=numpy.inf,
-            X=X, Y=Y, M=M
+            X=X, Y=Y, M=M,
+            seed=1234,
         )
         assert fun.D == 1
         assert fun.M == M
@@ -154,13 +154,13 @@ class TestSampleRFF:
             'sigma': numpy.array(0.9789097)
         }
 
-        numpy.random.seed(1234)
         fun = rff.sample_rff(
             lengthscales=mp['ls'],
             scaling=mp['scaling'],
             noise=mp['sigma'],
             kernel_nu=numpy.inf,
-            X=X, Y=Y, M=M
+            X=X, Y=Y, M=M,
+            seed=1234,
         )
         assert fun.D == 2
         assert fun.M == M
@@ -204,14 +204,15 @@ class TestRffSaveLoad:
         assert 'empty' in execinfo.value.args[0]
 
         # sample a list of RFFs
-        numpy.random.seed(1234)
+        rng = numpy.random.default_rng(seed=1234)
         rffs = [
             rff.sample_rff(
                 lengthscales=mp['ls'],
                 scaling=mp['scaling'],
                 noise=mp['sigma'],
                 kernel_nu=numpy.inf,
-                X=X, Y=Y, M=200
+                X=X, Y=Y, M=200,
+                seed=rng,
             )
             for i in range(20)
         ]

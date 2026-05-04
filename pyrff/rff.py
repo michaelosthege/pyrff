@@ -16,6 +16,7 @@ import os
 import scipy.linalg
 import scipy.stats
 import typing
+from numpy.random import Generator, RandomState, SeedSequence, BitGenerator
 
 
 from . exceptions import ShapeError
@@ -176,6 +177,7 @@ def sample_rff(
     M:int,
     *,
     max_retries: int=5,
+    seed: int | SeedSequence | BitGenerator | Generator | RandomState | None = None,
 ) -> typing.Tuple[
     typing.Callable[[numpy.ndarray], typing.Union[numpy.ndarray, float]],
     typing.Callable[[numpy.ndarray], typing.Union[numpy.ndarray, float]],
@@ -220,6 +222,11 @@ def sample_rff(
     max_retries
         Maximum number of retries in case of LinAlgError.
         Retries will be DEBUG-logged.
+    seed
+        Random seed for reproducibility.
+        ⚠️ When sampling many RFFs in a loop,
+        you should pass a `numpy.random.Generator` or `numpy.random.SeedSequence`,
+        otherwise the RFFs will all be identical!
 
     Returns
     -------
@@ -230,6 +237,7 @@ def sample_rff(
     g_rff_njit : callable
         jit-compiled gradient, takes (?, D) or (D,) coordinates, returning (?, D) or (?, D) respectively
     """
+    rng = numpy.random.default_rng(seed)
     # check inputs
     X = numpy.atleast_2d(X)
     Y = numpy.atleast_1d(Y)
@@ -256,7 +264,7 @@ def sample_rff(
     # construct function to sample p(w) (see [Bradford, 2018], equations 27 and 28)
     if numpy.isinf(kernel_nu):
         def p_w(size:tuple) -> numpy.ndarray:
-            return numpy.random.normal(loc=0, scale=1 / lengthscales, size=size)
+            return rng.normal(loc=0, scale=1 / lengthscales, size=size)
     else:
         def p_w(size:tuple) -> numpy.ndarray:
             return scipy.stats.t.rvs(loc=0, scale=1 / lengthscales, df=kernel_nu, size=size)
@@ -266,7 +274,7 @@ def sample_rff(
             # sample function features
             W = p_w(size=(M, D))
             assert W.shape == (M, D)
-            B = numpy.random.uniform(0, 2*numpy.pi, size=(M, 1))
+            B = rng.uniform(0, 2*numpy.pi, size=(M, 1))
             assert B.shape == (M, 1)
 
             zeta = sqrt_2_alpha_over_m * numpy.cos(numpy.dot(W, X.T) + B)
@@ -282,7 +290,7 @@ def sample_rff(
             variance_of_post_theta = A_inverse
             assert variance_of_post_theta.shape == (M, M)
 
-            sample_of_theta = numpy.random.multivariate_normal(mean_of_post_theta, variance_of_post_theta)
+            sample_of_theta = rng.multivariate_normal(mean_of_post_theta, variance_of_post_theta)
         except numpy.linalg.LinAlgError as ex:
             if r == 0:
                 raise
