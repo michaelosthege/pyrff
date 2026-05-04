@@ -185,6 +185,61 @@ class TestSampleRFF:
         numpy.testing.assert_allclose(fun.grad(X), grad_diff, atol=1e-6)
         pass
 
+    @pytest.mark.xfail(reason="Current RFF implementation is sensitive to mean(Y).")
+    def test_sample_rff_auto_zeroing(self):
+        X = numpy.array([[0, 0.75, -0.75, -0.375, 1.125, 0.375, -1.125]]).T
+        Y = numpy.array([
+            0.17817326, -0.14260799, 0.13385016,
+            0.44349725, -0.11945854, -0.28416883, -0.06767212
+        ])
+        mp = {
+            'ls': numpy.array([0.33805151]),
+            'scaling': numpy.array(0.87595652),
+            'sigma': numpy.array(0.00041511)
+        }
+
+        # Autocorrect Y to 0-mean so we can assert exact matches between
+        # a non-zeroed RFF on 0-mean Y and auto-zeroed RFF on offset Y.
+        Y = Y - Y.mean()
+        fun = rff.sample_rff(
+            lengthscales=mp['ls'],
+            scaling=mp['scaling'],
+            noise=mp['sigma'],
+            kernel_nu=numpy.inf,
+            X=X,
+            Y=Y,
+            M=100,
+            seed=1234,
+        )
+        # Draw another RFF on shifted Y, but with auto-zeroing enabled.
+        fun_offset = rff.sample_rff(
+            lengthscales=mp['ls'],
+            scaling=mp['scaling'],
+            noise=mp['sigma'],
+            kernel_nu=numpy.inf,
+            X=X,
+            Y=Y + 500_000,
+            M=100,
+            seed=1234,
+            # TODO: auto_zero=True,
+        )
+
+        N = 500
+        D = X.shape[1]
+        X = numpy.random.default_rng(69).uniform(low=-2, high=2, size=(N, D))
+        # Compare the RFFs based on function evaluations at random coordinates
+        y_pred = fun(X)
+        y_pred_offset = fun_offset(X)
+
+        # Centered or not, Y spreads by ~1 point-to-point,
+        # therefore the RFFs should fluctuate by the same magnitude.
+        assert numpy.ptp(y_pred) < 5
+        assert numpy.ptp(y_pred_offset) < 5
+
+        # With auto-zeroing the RFF will match exactly in its shape, only shifted.
+        numpy.testing.assert_allclose(y_pred_offset, y_pred + 500_000)
+        pass
+
 
 class TestRffSaveLoad:
     def test_save_load_rffs(self):
